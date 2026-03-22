@@ -778,7 +778,8 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                 connectionStatusEl.setText("");
                 connectionStatusEl.removeAttribute("style");
             };
-            const selectedSecretName = plugin.githubAuth.getSelectedSecretName();
+            const selectedSecretName =
+                plugin.githubAuth.getSelectedSecretName();
 
             const patSetting = new Setting(containerEl)
                 .setName("GitHub PAT secret")

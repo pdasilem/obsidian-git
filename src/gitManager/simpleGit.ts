@@ -734,9 +734,7 @@ export class SimpleGit extends GitManager {
                 }
                 this.app.workspace.trigger("obsidian-git:head-change");
 
-                const afterMergeCommit = await this.git.revparse([
-                    branch!,
-                ]);
+                const afterMergeCommit = await this.git.revparse([branch!]);
 
                 const filesChanged = await this.git.diff([
                     `${localCommit}..${afterMergeCommit}`,
@@ -781,8 +779,7 @@ export class SimpleGit extends GitManager {
                 configuredRemote != null
                     ? `${configuredRemote.remoteName}/${configuredRemote.branch}`
                     : status.tracking;
-            const currentBranch =
-                configuredRemote?.branch ?? status.current!;
+            const currentBranch = configuredRemote?.branch ?? status.current!;
 
             if (!trackingBranch && this.plugin.settings.updateSubmodules) {
                 this.plugin.log(
