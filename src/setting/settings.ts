@@ -774,12 +774,13 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                 connectionStatusEl.setText("");
                 connectionStatusEl.removeAttribute("style");
             };
+            const selectedSecretName = plugin.githubAuth.getSelectedSecretName();
 
             const patSetting = new Setting(containerEl)
                 .setName("GitHub PAT secret")
                 .setDesc(
-                    plugin.githubAuth.getSelectedSecretName()
-                        ? `Selected secret: ${plugin.githubAuth.getSelectedSecretName()}`
+                    selectedSecretName
+                        ? `Selected secret: ${selectedSecretName}`
                         : "No secret selected."
                 );
             patSetting.addButton((button) =>
@@ -788,7 +789,9 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                         .getAvailableSecretNames()
                         .sort((a, b) => a.localeCompare(b));
                     if (secretNames.length === 0) {
-                        new Notice("No secrets found in Obsidian secret storage.");
+                        new Notice(
+                            "No secrets found in Obsidian secret storage."
+                        );
                         return;
                     }
                     const secretModal = new GeneralModal(this.plugin, {
@@ -808,14 +811,15 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                 })
             );
             patSetting.addExtraButton((button) =>
-                button.setIcon("trash").setTooltip("Clear selected secret").onClick(
-                    () => {
+                button
+                    .setIcon("trash")
+                    .setTooltip("Clear selected secret")
+                    .onClick(() => {
                         plugin.githubAuth.setSelectedSecretName(null);
                         patSetting.setDesc("No secret selected.");
                         clearConnectionStatus();
                         new Notice("GitHub PAT secret selection cleared.");
-                    }
-                )
+                    })
             );
 
             new Setting(containerEl)
