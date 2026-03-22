@@ -30,10 +30,8 @@ import type {
     SyncMethod,
 } from "src/types";
 import {
-    convertSshToGitHubHttps,
     convertToRgb,
     formatMinutes,
-    isGitHubHttpsUrl,
     normalizeGitHubRepoUrl,
     rgbToString,
 } from "src/utils";
@@ -776,6 +774,47 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                 connectionStatusEl.removeAttribute("style");
             };
 
+            const patSetting = new Setting(containerEl)
+                .setName("GitHub PAT secret")
+                .setDesc(
+                    plugin.githubAuth.getSelectedSecretName()
+                        ? `Selected secret: ${plugin.githubAuth.getSelectedSecretName()}`
+                        : "No secret selected."
+                );
+            patSetting.addButton((button) =>
+                button.setButtonText("Select secret").onClick(async () => {
+                    const secretNames = plugin.githubAuth
+                        .getAvailableSecretNames()
+                        .sort((a, b) => a.localeCompare(b));
+                    if (secretNames.length === 0) {
+                        new Notice("No secrets found in Obsidian secret storage.");
+                        return;
+                    }
+                    const secretName = await new GeneralModal(this.plugin, {
+                        options: secretNames,
+                        placeholder: "Select PAT secret",
+                        onlySelection: true,
+                    }).openAndGetResult();
+                    if (secretName == undefined) {
+                        return;
+                    }
+                    plugin.githubAuth.setSelectedSecretName(secretName);
+                    patSetting.setDesc(`Selected secret: ${secretName}`);
+                    clearConnectionStatus();
+                    new Notice("GitHub PAT secret selected.");
+                })
+            );
+            patSetting.addExtraButton((button) =>
+                button.setIcon("trash").setTooltip("Clear selected secret").onClick(
+                    () => {
+                        plugin.githubAuth.setSelectedSecretName(null);
+                        patSetting.setDesc("No secret selected.");
+                        clearConnectionStatus();
+                        new Notice("GitHub PAT secret selection cleared.");
+                    }
+                )
+            );
+
             new Setting(containerEl)
                 .setName("GitHub username")
                 .setDesc(
@@ -794,7 +833,7 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
             new Setting(containerEl)
                 .setName("Repository URL")
                 .setDesc(
-                    "HTTPS URL of the personal GitHub repository used by this vault."
+                    "HTTPS URL of the personal GitHub repository used by this vault. It will be applied to origin automatically."
                 )
                 .addText((cb) => {
                     cb.setPlaceholder(DEFAULT_SETTINGS.githubRepoUrl);
@@ -802,20 +841,6 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                     cb.onChange(async (value) => {
                         plugin.settings.githubRepoUrl =
                             normalizeGitHubRepoUrl(value);
-                        clearConnectionStatus();
-                        await plugin.saveSettings();
-                    });
-                });
-
-            new Setting(containerEl)
-                .setName("Remote name")
-                .setDesc("Remote to use for personal GitHub sync.")
-                .addText((cb) => {
-                    cb.setPlaceholder(DEFAULT_SETTINGS.githubRemoteName);
-                    cb.setValue(plugin.settings.githubRemoteName);
-                    cb.onChange(async (value) => {
-                        plugin.settings.githubRemoteName =
-                            value.trim() || DEFAULT_SETTINGS.githubRemoteName;
                         clearConnectionStatus();
                         await plugin.saveSettings();
                     });
@@ -836,114 +861,6 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                         await plugin.saveSettings();
                     });
                 });
-
-            const patSetting = new Setting(containerEl)
-                .setName("GitHub personal access token")
-                .setDesc(
-                    plugin.githubAuth.hasPat()
-                        ? "PAT saved in Obsidian secret storage."
-                        : "PAT missing."
-                );
-            patSetting.addButton((button) =>
-                button.setButtonText("Save PAT").onClick(async () => {
-                    const pat = await new GeneralModal(this.plugin, {
-                        placeholder: "Enter GitHub personal access token",
-                        obscure: true,
-                    }).openAndGetResult();
-                    if (pat == undefined) {
-                        return;
-                    }
-                    plugin.githubAuth.setPat(pat.trim());
-                    patSetting.setDesc("PAT saved in Obsidian secret storage.");
-                    clearConnectionStatus();
-                })
-            );
-            patSetting.addExtraButton((button) =>
-                button.setIcon("trash").setTooltip("Clear saved PAT").onClick(
-                    () => {
-                        plugin.githubAuth.clearPat();
-                        patSetting.setDesc("PAT missing.");
-                        clearConnectionStatus();
-                    }
-                )
-            );
-
-            new Setting(containerEl)
-                .setName("Use current remote URL")
-                .setDesc(
-                    "Copies the configured remote URL from the repository into the GitHub Sync setting."
-                )
-                .addButton((button) =>
-                    button.setButtonText("Use current remote").onClick(
-                        async () => {
-                            const remoteUrl = await plugin.gitManager.getRemoteUrl(
-                                plugin.settings.githubRemoteName
-                            );
-                            if (remoteUrl == undefined) {
-                                new Notice("Remote does not exist.");
-                                return;
-                            }
-                            plugin.settings.githubRepoUrl =
-                                normalizeGitHubRepoUrl(remoteUrl);
-                            clearConnectionStatus();
-                            await plugin.saveSettings();
-                            this.display();
-                        }
-                    )
-                );
-
-            new Setting(containerEl)
-                .setName("Set remote URL")
-                .setDesc(
-                    "Applies the configured GitHub repository URL to the configured remote."
-                )
-                .addButton((button) =>
-                    button.setButtonText("Set remote").onClick(async () => {
-                        const repoUrl = normalizeGitHubRepoUrl(
-                            plugin.settings.githubRepoUrl
-                        );
-                        if (!isGitHubHttpsUrl(repoUrl)) {
-                            new Notice(
-                                "Repository URL must be an HTTPS github.com URL."
-                            );
-                            return;
-                        }
-                        plugin.settings.githubRepoUrl = repoUrl;
-                        await plugin.saveSettings();
-                        await plugin.gitManager.setRemote(
-                            plugin.settings.githubRemoteName,
-                            repoUrl
-                        );
-                        clearConnectionStatus();
-                        new Notice("Remote URL updated.");
-                    })
-                );
-
-            new Setting(containerEl)
-                .setName("Convert SSH URL to HTTPS")
-                .setDesc(
-                    "Converts a GitHub SSH remote URL into an HTTPS URL and stores it in the GitHub Sync settings."
-                )
-                .addButton((button) =>
-                    button.setButtonText("Convert").onClick(async () => {
-                        const currentRemoteUrl = await plugin.gitManager.getRemoteUrl(
-                            plugin.settings.githubRemoteName
-                        );
-                        const candidateUrl =
-                            currentRemoteUrl ?? plugin.settings.githubRepoUrl;
-                        const httpsUrl = convertSshToGitHubHttps(candidateUrl);
-                        if (httpsUrl == undefined) {
-                            new Notice(
-                                "Configured URL is not a GitHub SSH URL."
-                            );
-                            return;
-                        }
-                        plugin.settings.githubRepoUrl = httpsUrl;
-                        clearConnectionStatus();
-                        await plugin.saveSettings();
-                        this.display();
-                    })
-                );
 
             connectionStatusSetting.addButton((button) =>
                 button.setButtonText("Test connection").onClick(async () => {

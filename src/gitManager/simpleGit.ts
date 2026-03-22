@@ -1139,6 +1139,7 @@ export class SimpleGit extends GitManager {
         if (!this.hasConfiguredGitHubSync()) {
             return undefined;
         }
+        await this.ensureConfiguredGitHubRemote();
         const config = this.getConfiguredGitHubRemote(true, false);
         const status = await this.git.status();
         if (status.current === config.branch) {
@@ -1166,6 +1167,17 @@ export class SimpleGit extends GitManager {
         throw new Error(
             `Configured branch "${config.branch}" does not exist locally or on remote "${config.remoteName}".`
         );
+    }
+
+    async ensureConfiguredGitHubRemote(): Promise<void> {
+        if (!this.hasConfiguredGitHubSync()) {
+            return;
+        }
+        const config = this.getConfiguredGitHubRemote(true, false);
+        const currentRemoteUrl = await this.getRemoteUrl(config.remoteName);
+        if (currentRemoteUrl !== config.remoteUrl) {
+            await this.setRemote(config.remoteName, config.remoteUrl);
+        }
     }
 
     hasConfiguredGitHubSync(): boolean {
@@ -1283,8 +1295,7 @@ export class SimpleGit extends GitManager {
         const remoteUrl = normalizeGitHubRepoUrl(
             this.plugin.settings.githubRepoUrl
         );
-        const remoteName =
-            this.plugin.settings.githubRemoteName.trim() || "origin";
+        const remoteName = "origin";
         const branch = this.plugin.settings.githubBranch.trim() || "main";
         const pat = this.plugin.githubAuth.getPat() ?? "";
 

@@ -1,24 +1,34 @@
 import type { App } from "obsidian";
-
-const GITHUB_PAT_SECRET_ID = "github-pat";
+import type { LocalStorageSettings } from "./setting/localStorageSettings";
 
 export class GitHubAuth {
-    constructor(private readonly app: App) {}
+    constructor(
+        private readonly app: App,
+        private readonly localStorage: LocalStorageSettings
+    ) {}
 
     getPat(): string | null {
-        return this.app.secretStorage.getSecret(GITHUB_PAT_SECRET_ID);
+        const secretName = this.getSelectedSecretName();
+        if (!secretName) {
+            return null;
+        }
+        return this.app.secretStorage.getSecret(secretName);
+    }
+
+    getAvailableSecretNames(): string[] {
+        return this.app.secretStorage.listSecrets();
+    }
+
+    getSelectedSecretName(): string | null {
+        return this.localStorage.getGitHubPatSecretName();
+    }
+
+    setSelectedSecretName(secretName: string | null): void {
+        this.localStorage.setGitHubPatSecretName(secretName);
     }
 
     hasPat(): boolean {
         const pat = this.getPat();
         return pat !== null && pat.length > 0;
-    }
-
-    setPat(pat: string): void {
-        this.app.secretStorage.setSecret(GITHUB_PAT_SECRET_ID, pat);
-    }
-
-    clearPat(): void {
-        this.app.secretStorage.setSecret(GITHUB_PAT_SECRET_ID, "");
     }
 }

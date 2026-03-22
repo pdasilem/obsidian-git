@@ -58,7 +58,6 @@ export interface ObsidianGitSettings {
     basePath: string;
     githubUsername: string;
     githubRepoUrl: string;
-    githubRemoteName: string;
     githubBranch: string;
     showedMobileNotice: boolean;
     refreshSourceControlTimer: number;

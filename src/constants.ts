@@ -35,7 +35,6 @@ export const DEFAULT_SETTINGS: ObsidianGitSettings = {
     basePath: "",
     githubUsername: "",
     githubRepoUrl: "",
-    githubRemoteName: "origin",
     githubBranch: "main",
     differentIntervalCommitAndPush: false,
     changedFilesInStatusBar: false,

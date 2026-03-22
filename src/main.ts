@@ -104,7 +104,7 @@ export default class ObsidianGit extends Plugin {
     }
 
     get githubAuth(): GitHubAuth {
-        this._githubAuth ??= new GitHubAuth(this.app);
+        this._githubAuth ??= new GitHubAuth(this.app, this.localStorage);
         return this._githubAuth;
     }
 

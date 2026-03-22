@@ -18,6 +18,7 @@ export class LocalStorageSettings {
             "lastAutoPush",
             "gitPath",
             "pluginDisabled",
+            "githubPatSecretName",
         ];
         for (const key of keys) {
             const old = localStorage.getItem(this.prefix + key);
@@ -95,6 +96,17 @@ export class LocalStorageSettings {
 
     setGitPath(value: string): void {
         return this.app.saveLocalStorage(this.prefix + "gitPath", value);
+    }
+
+    getGitHubPatSecretName(): string | null {
+        return this.app.loadLocalStorage(this.prefix + "githubPatSecretName");
+    }
+
+    setGitHubPatSecretName(value: string | null): void {
+        return this.app.saveLocalStorage(
+            this.prefix + "githubPatSecretName",
+            value
+        );
     }
 
     getPATHPaths(): string[] {
