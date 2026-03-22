@@ -29,7 +29,14 @@ import type {
     ShowAuthorInHistoryView,
     SyncMethod,
 } from "src/types";
-import { convertToRgb, formatMinutes, rgbToString } from "src/utils";
+import {
+    convertSshToGitHubHttps,
+    convertToRgb,
+    formatMinutes,
+    isGitHubHttpsUrl,
+    normalizeGitHubRepoUrl,
+    rgbToString,
+} from "src/utils";
 
 const FORMAT_STRING_REFERENCE_URL =
     "https://momentjs.com/docs/#/parsing/string-format/";
@@ -747,6 +754,220 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                         await plugin.saveSettings();
                     })
             );
+
+        if (plugin.gitManager instanceof SimpleGit) {
+            new Setting(containerEl)
+                .setName("GitHub Sync")
+                .setDesc(
+                    "Desktop-only HTTPS sync with a GitHub personal access token stored in Obsidian secret storage."
+                )
+                .setHeading();
+
+            const connectionStatusSetting = new Setting(containerEl)
+                .setName("Test GitHub connection")
+                .setDesc(
+                    "Checks the configured repository and branch using the saved GitHub PAT."
+                );
+            const connectionStatusEl =
+                connectionStatusSetting.descEl.createSpan();
+            connectionStatusEl.addClass("obsidian-git-connection-status");
+            const clearConnectionStatus = () => {
+                connectionStatusEl.setText("");
+                connectionStatusEl.removeAttribute("style");
+            };
+
+            new Setting(containerEl)
+                .setName("GitHub username")
+                .setDesc(
+                    "Used for HTTPS authentication prompts. Enter your personal GitHub username."
+                )
+                .addText((cb) => {
+                    cb.setPlaceholder(DEFAULT_SETTINGS.githubUsername);
+                    cb.setValue(plugin.settings.githubUsername);
+                    cb.onChange(async (value) => {
+                        plugin.settings.githubUsername = value.trim();
+                        clearConnectionStatus();
+                        await plugin.saveSettings();
+                    });
+                });
+
+            new Setting(containerEl)
+                .setName("Repository URL")
+                .setDesc(
+                    "HTTPS URL of the personal GitHub repository used by this vault."
+                )
+                .addText((cb) => {
+                    cb.setPlaceholder(DEFAULT_SETTINGS.githubRepoUrl);
+                    cb.setValue(plugin.settings.githubRepoUrl);
+                    cb.onChange(async (value) => {
+                        plugin.settings.githubRepoUrl =
+                            normalizeGitHubRepoUrl(value);
+                        clearConnectionStatus();
+                        await plugin.saveSettings();
+                    });
+                });
+
+            new Setting(containerEl)
+                .setName("Remote name")
+                .setDesc("Remote to use for personal GitHub sync.")
+                .addText((cb) => {
+                    cb.setPlaceholder(DEFAULT_SETTINGS.githubRemoteName);
+                    cb.setValue(plugin.settings.githubRemoteName);
+                    cb.onChange(async (value) => {
+                        plugin.settings.githubRemoteName =
+                            value.trim() || DEFAULT_SETTINGS.githubRemoteName;
+                        clearConnectionStatus();
+                        await plugin.saveSettings();
+                    });
+                });
+
+            new Setting(containerEl)
+                .setName("Branch")
+                .setDesc(
+                    "Branch that the plugin is allowed to sync. Defaults to main."
+                )
+                .addText((cb) => {
+                    cb.setPlaceholder(DEFAULT_SETTINGS.githubBranch);
+                    cb.setValue(plugin.settings.githubBranch);
+                    cb.onChange(async (value) => {
+                        plugin.settings.githubBranch =
+                            value.trim() || DEFAULT_SETTINGS.githubBranch;
+                        clearConnectionStatus();
+                        await plugin.saveSettings();
+                    });
+                });
+
+            const patSetting = new Setting(containerEl)
+                .setName("GitHub personal access token")
+                .setDesc(
+                    plugin.githubAuth.hasPat()
+                        ? "PAT saved in Obsidian secret storage."
+                        : "PAT missing."
+                );
+            patSetting.addButton((button) =>
+                button.setButtonText("Save PAT").onClick(async () => {
+                    const pat = await new GeneralModal(this.plugin, {
+                        placeholder: "Enter GitHub personal access token",
+                        obscure: true,
+                    }).openAndGetResult();
+                    if (pat == undefined) {
+                        return;
+                    }
+                    plugin.githubAuth.setPat(pat.trim());
+                    patSetting.setDesc("PAT saved in Obsidian secret storage.");
+                    clearConnectionStatus();
+                })
+            );
+            patSetting.addExtraButton((button) =>
+                button.setIcon("trash").setTooltip("Clear saved PAT").onClick(
+                    () => {
+                        plugin.githubAuth.clearPat();
+                        patSetting.setDesc("PAT missing.");
+                        clearConnectionStatus();
+                    }
+                )
+            );
+
+            new Setting(containerEl)
+                .setName("Use current remote URL")
+                .setDesc(
+                    "Copies the configured remote URL from the repository into the GitHub Sync setting."
+                )
+                .addButton((button) =>
+                    button.setButtonText("Use current remote").onClick(
+                        async () => {
+                            const remoteUrl = await plugin.gitManager.getRemoteUrl(
+                                plugin.settings.githubRemoteName
+                            );
+                            if (remoteUrl == undefined) {
+                                new Notice("Remote does not exist.");
+                                return;
+                            }
+                            plugin.settings.githubRepoUrl =
+                                normalizeGitHubRepoUrl(remoteUrl);
+                            clearConnectionStatus();
+                            await plugin.saveSettings();
+                            this.display();
+                        }
+                    )
+                );
+
+            new Setting(containerEl)
+                .setName("Set remote URL")
+                .setDesc(
+                    "Applies the configured GitHub repository URL to the configured remote."
+                )
+                .addButton((button) =>
+                    button.setButtonText("Set remote").onClick(async () => {
+                        const repoUrl = normalizeGitHubRepoUrl(
+                            plugin.settings.githubRepoUrl
+                        );
+                        if (!isGitHubHttpsUrl(repoUrl)) {
+                            new Notice(
+                                "Repository URL must be an HTTPS github.com URL."
+                            );
+                            return;
+                        }
+                        plugin.settings.githubRepoUrl = repoUrl;
+                        await plugin.saveSettings();
+                        await plugin.gitManager.setRemote(
+                            plugin.settings.githubRemoteName,
+                            repoUrl
+                        );
+                        clearConnectionStatus();
+                        new Notice("Remote URL updated.");
+                    })
+                );
+
+            new Setting(containerEl)
+                .setName("Convert SSH URL to HTTPS")
+                .setDesc(
+                    "Converts a GitHub SSH remote URL into an HTTPS URL and stores it in the GitHub Sync settings."
+                )
+                .addButton((button) =>
+                    button.setButtonText("Convert").onClick(async () => {
+                        const currentRemoteUrl = await plugin.gitManager.getRemoteUrl(
+                            plugin.settings.githubRemoteName
+                        );
+                        const candidateUrl =
+                            currentRemoteUrl ?? plugin.settings.githubRepoUrl;
+                        const httpsUrl = convertSshToGitHubHttps(candidateUrl);
+                        if (httpsUrl == undefined) {
+                            new Notice(
+                                "Configured URL is not a GitHub SSH URL."
+                            );
+                            return;
+                        }
+                        plugin.settings.githubRepoUrl = httpsUrl;
+                        clearConnectionStatus();
+                        await plugin.saveSettings();
+                        this.display();
+                    })
+                );
+
+            connectionStatusSetting.addButton((button) =>
+                button.setButtonText("Test connection").onClick(async () => {
+                    clearConnectionStatus();
+                    try {
+                        await (
+                            plugin.gitManager as SimpleGit
+                        ).testGitHubConnection();
+                        connectionStatusEl.setText("✓");
+                        connectionStatusEl.setAttribute(
+                            "style",
+                            "color: var(--color-green); font-weight: var(--font-semibold); margin-left: 8px;"
+                        );
+                    } catch (error) {
+                        connectionStatusEl.setText("✕");
+                        connectionStatusEl.setAttribute(
+                            "style",
+                            "color: var(--color-red); font-weight: var(--font-semibold); margin-left: 8px;"
+                        );
+                        plugin.displayError(error);
+                    }
+                })
+            );
+        }
 
         if (plugin.gitManager instanceof IsomorphicGit) {
             new Setting(containerEl)

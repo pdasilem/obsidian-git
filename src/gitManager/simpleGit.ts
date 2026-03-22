@@ -26,7 +26,13 @@ import type {
     Status,
 } from "../types";
 import { CurrentGitAction, NoNetworkError } from "../types";
-import { impossibleBranch, spawnAsync, splitRemoteBranch } from "../utils";
+import {
+    impossibleBranch,
+    isGitHubHttpsUrl,
+    normalizeGitHubRepoUrl,
+    spawnAsync,
+    splitRemoteBranch,
+} from "../utils";
 import { GitManager } from "./gitManager";
 
 export class SimpleGit extends GitManager {
@@ -125,6 +131,10 @@ export class SimpleGit extends GitManager {
             if (envs["SSH_ASKPASS"] == undefined) {
                 envs["SSH_ASKPASS"] = askPassPath;
             }
+            if (envs["GIT_ASKPASS"] == undefined) {
+                envs["GIT_ASKPASS"] = askPassPath;
+            }
+            envs["GIT_TERMINAL_PROMPT"] = "0";
 
             // OpenSSH requires DISPLAY variable to be set for SSH_ASKPASS to
             // detect a graphical environment. This is not the case for e.g.
@@ -227,6 +237,14 @@ export class SimpleGit extends GitManager {
                 if (!(await adapter.exists(triggerFilePath))) continue;
 
                 const data = await adapter.read(triggerFilePath);
+                const autoResponse = this.getGitHubAskpassResponse(data);
+                if (autoResponse !== undefined) {
+                    await adapter.write(
+                        `${triggerFilePath}.response`,
+                        autoResponse
+                    );
+                    continue;
+                }
                 let notice: Notice | undefined;
                 // The text is too long for the modal, so a notice is shown instead
                 if (data.length > 60) {
@@ -631,20 +649,34 @@ export class SimpleGit extends GitManager {
                     "--recursive",
                 ]);
 
+            const configuredRemote = this.getConfiguredGitHubRemote();
             const branchInfo = await this.branchInfo();
-            const localCommit = await this.git.revparse([branchInfo.current!]);
+            const branch = configuredRemote?.branch ?? branchInfo.current;
+            if (configuredRemote) {
+                this.ensureExpectedBranch(branchInfo.current, configuredRemote);
+            }
+            const trackingBranch =
+                configuredRemote != null
+                    ? `${configuredRemote.remoteName}/${configuredRemote.branch}`
+                    : branchInfo.tracking;
+            const localCommit = await this.git.revparse([branch!]);
 
-            if (!branchInfo.tracking && this.plugin.settings.updateSubmodules) {
+            if (!trackingBranch && this.plugin.settings.updateSubmodules) {
                 this.plugin.log(
                     "No tracking branch found. Ignoring pull of main repo and updating submodules only."
                 );
                 return;
             }
 
-            await this.git.fetch();
-            const upstreamCommit = await this.git.revparse([
-                branchInfo.tracking!,
-            ]);
+            if (configuredRemote) {
+                await this.git.fetch([
+                    configuredRemote.remoteName,
+                    configuredRemote.branch,
+                ]);
+            } else {
+                await this.git.fetch();
+            }
+            const upstreamCommit = await this.git.revparse([trackingBranch!]);
 
             if (localCommit !== upstreamCommit) {
                 if (
@@ -652,7 +684,7 @@ export class SimpleGit extends GitManager {
                     this.plugin.settings.syncMethod === "rebase"
                 ) {
                     try {
-                        const args = [branchInfo.tracking!];
+                        const args = [trackingBranch!];
 
                         if (this.plugin.settings.mergeStrategy !== "none") {
                             args.push(
@@ -692,7 +724,7 @@ export class SimpleGit extends GitManager {
                 this.app.workspace.trigger("obsidian-git:head-change");
 
                 const afterMergeCommit = await this.git.revparse([
-                    branchInfo.current!,
+                    branch!,
                 ]);
 
                 const filesChanged = await this.git.diff([
@@ -730,8 +762,16 @@ export class SimpleGit extends GitManager {
                 console.log(res);
             }
             const status = await this.git.status();
-            const trackingBranch = status.tracking;
-            const currentBranch = status.current!;
+            const configuredRemote = this.getConfiguredGitHubRemote();
+            if (configuredRemote) {
+                this.ensureExpectedBranch(status.current, configuredRemote);
+            }
+            const trackingBranch =
+                configuredRemote != null
+                    ? `${configuredRemote.remoteName}/${configuredRemote.branch}`
+                    : status.tracking;
+            const currentBranch =
+                configuredRemote?.branch ?? status.current!;
 
             if (!trackingBranch && this.plugin.settings.updateSubmodules) {
                 this.plugin.log(
@@ -750,7 +790,15 @@ export class SimpleGit extends GitManager {
                 ).changed;
             }
 
-            await this.git.push();
+            if (configuredRemote) {
+                await this.git.push([
+                    "--set-upstream",
+                    configuredRemote.remoteName,
+                    `${configuredRemote.branch}:${configuredRemote.branch}`,
+                ]);
+            } else {
+                await this.git.push();
+            }
 
             return remoteChangedFiles;
         } catch (e) {
@@ -760,8 +808,17 @@ export class SimpleGit extends GitManager {
 
     async getUnpushedCommits(): Promise<number> {
         const status = await this.git.status();
-        const trackingBranch = status.tracking;
-        const currentBranch = status.current;
+        const configuredRemote = this.getConfiguredGitHubRemote();
+        if (configuredRemote) {
+            if (status.current !== configuredRemote.branch) {
+                return 0;
+            }
+        }
+        const trackingBranch =
+            configuredRemote != null
+                ? `${configuredRemote.remoteName}/${configuredRemote.branch}`
+                : status.tracking;
+        const currentBranch = configuredRemote?.branch ?? status.current;
 
         if (trackingBranch == null || currentBranch == null) {
             return 0;
@@ -788,8 +845,17 @@ export class SimpleGit extends GitManager {
             return true;
         }
         const status = await this.git.status();
-        const trackingBranch = status.tracking;
-        const currentBranch = status.current!;
+        const configuredRemote = this.getConfiguredGitHubRemote();
+        if (configuredRemote) {
+            if (status.current !== configuredRemote.branch) {
+                return false;
+            }
+        }
+        const trackingBranch =
+            configuredRemote != null
+                ? `${configuredRemote.remoteName}/${configuredRemote.branch}`
+                : status.tracking;
+        const currentBranch = configuredRemote?.branch ?? status.current!;
         if (!trackingBranch) {
             return false;
         }
@@ -938,13 +1004,21 @@ export class SimpleGit extends GitManager {
     }
 
     async clone(url: string, dir: string, depth?: number): Promise<void> {
+        const args = depth ? ["--depth", `${depth}`] : [];
+        const configuredRemote = this.getConfiguredGitHubRemote();
+        if (
+            configuredRemote != null &&
+            normalizeGitHubRepoUrl(url) === configuredRemote.remoteUrl
+        ) {
+            args.push("--branch", configuredRemote.branch, "--single-branch");
+        }
         await this.git.clone(
             url,
             path.join(
                 (this.app.vault.adapter as FileSystemAdapter).getBasePath(),
                 dir
             ),
-            depth ? ["--depth", `${depth}`] : []
+            args
         );
 
         // Set required attributes like `absoluteRepoPath` and add the script to the exclude file if needed.
@@ -971,6 +1045,18 @@ export class SimpleGit extends GitManager {
     }
 
     async fetch(remote?: string): Promise<void> {
+        const configuredRemote = this.getConfiguredGitHubRemote();
+        if (configuredRemote && remote == undefined) {
+            this.ensureExpectedBranch(
+                (await this.git.status()).current,
+                configuredRemote
+            );
+            await this.git.fetch([
+                configuredRemote.remoteName,
+                configuredRemote.branch,
+            ]);
+            return;
+        }
         await this.git.fetch(remote != undefined ? [remote] : []);
     }
 
@@ -1036,6 +1122,56 @@ export class SimpleGit extends GitManager {
 
     updateBasePath(_: string): Promise<void> {
         return this.setGitInstance(true);
+    }
+
+    async testGitHubConnection(): Promise<void> {
+        const config = this.getConfiguredGitHubRemote(true, true);
+        await this.git.raw([
+            "ls-remote",
+            "--exit-code",
+            "--heads",
+            config.remoteUrl,
+            config.branch,
+        ]);
+    }
+
+    async ensureConfiguredGitHubBranch(): Promise<string | undefined> {
+        if (!this.hasConfiguredGitHubSync()) {
+            return undefined;
+        }
+        const config = this.getConfiguredGitHubRemote(true, false);
+        const status = await this.git.status();
+        if (status.current === config.branch) {
+            return undefined;
+        }
+
+        const localBranches = (await this.git.branchLocal()).all;
+        if (localBranches.includes(config.branch)) {
+            await this.git.checkout(config.branch);
+            return config.branch;
+        }
+
+        const remoteBranch = `${config.remoteName}/${config.branch}`;
+        const remoteBranches = await this.getRemoteBranches(config.remoteName);
+        if (remoteBranches.includes(remoteBranch)) {
+            await this.git.checkout([
+                "-b",
+                config.branch,
+                "--track",
+                remoteBranch,
+            ]);
+            return config.branch;
+        }
+
+        throw new Error(
+            `Configured branch "${config.branch}" does not exist locally or on remote "${config.remoteName}".`
+        );
+    }
+
+    hasConfiguredGitHubSync(): boolean {
+        const username = this.plugin.settings.githubUsername.trim();
+        const remoteUrl = this.plugin.settings.githubRepoUrl.trim();
+        return username.length > 0 || remoteUrl.length > 0;
     }
 
     async getDiffString(
@@ -1128,6 +1264,104 @@ export class SimpleGit extends GitManager {
             } else {
                 throw error;
             }
+        }
+    }
+
+    private getConfiguredGitHubRemote(
+        requireCompleteConfig = false,
+        requirePat = requireCompleteConfig
+    ):
+        | {
+              branch: string;
+              remoteName: string;
+              remoteUrl: string;
+              username: string;
+              pat: string;
+          }
+        | undefined {
+        const username = this.plugin.settings.githubUsername.trim();
+        const remoteUrl = normalizeGitHubRepoUrl(
+            this.plugin.settings.githubRepoUrl
+        );
+        const remoteName =
+            this.plugin.settings.githubRemoteName.trim() || "origin";
+        const branch = this.plugin.settings.githubBranch.trim() || "main";
+        const pat = this.plugin.githubAuth.getPat() ?? "";
+
+        if (
+            !requireCompleteConfig &&
+            username.length === 0 &&
+            remoteUrl.length === 0
+        ) {
+            return undefined;
+        }
+        if (username.length === 0) {
+            throw new Error("GitHub username is missing.");
+        }
+        if (remoteUrl.length === 0) {
+            throw new Error("GitHub repository URL is missing.");
+        }
+        if (!isGitHubHttpsUrl(remoteUrl)) {
+            throw new Error(
+                "GitHub repository URL must use HTTPS and point to github.com."
+            );
+        }
+        if (branch.length === 0) {
+            throw new Error("GitHub branch is missing.");
+        }
+        if (requirePat && pat.length === 0) {
+            throw new Error("GitHub PAT is missing.");
+        }
+
+        return {
+            branch,
+            remoteName,
+            remoteUrl,
+            username,
+            pat,
+        };
+    }
+
+    private getGitHubAskpassResponse(prompt: string): string | undefined {
+        const lowerPrompt = prompt.toLowerCase();
+        if (!lowerPrompt.contains("github.com")) {
+            return undefined;
+        }
+
+        let config:
+            | {
+                  branch: string;
+                  remoteName: string;
+                  remoteUrl: string;
+                  username: string;
+                  pat: string;
+              }
+            | undefined;
+        try {
+            config = this.getConfiguredGitHubRemote();
+        } catch {
+            return "";
+        }
+        if (config == undefined) {
+            return "";
+        }
+        if (lowerPrompt.contains("username")) {
+            return config.username;
+        }
+        if (lowerPrompt.contains("password")) {
+            return config.pat;
+        }
+        return "";
+    }
+
+    private ensureExpectedBranch(
+        currentBranch: string | null,
+        config: { branch: string }
+    ): void {
+        if (currentBranch !== config.branch) {
+            throw new Error(
+                `Current branch "${currentBranch ?? "none"}" does not match configured branch "${config.branch}".`
+            );
         }
     }
 

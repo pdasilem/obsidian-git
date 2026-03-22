@@ -205,6 +205,27 @@ export function formatRemoteUrl(url: string): string {
     return url;
 }
 
+export function isGitHubHttpsUrl(url: string): boolean {
+    return /^https:\/\/github\.com\/[^/]+\/[^/]+(?:\.git)?$/i.test(url.trim());
+}
+
+export function normalizeGitHubRepoUrl(url: string): string {
+    const trimmed = url.trim();
+    if (!isGitHubHttpsUrl(trimmed)) {
+        return trimmed;
+    }
+    return trimmed.endsWith(".git") ? trimmed : `${trimmed}.git`;
+}
+
+export function convertSshToGitHubHttps(url: string): string | undefined {
+    const trimmed = url.trim();
+    const match = trimmed.match(/^git@github\.com:(.+?)\/(.+?)(?:\.git)?$/i);
+    if (!match) {
+        return undefined;
+    }
+    return `https://github.com/${match[1]}/${match[2]}.git`;
+}
+
 export function fileOpenableInObsidian(
     relativeVaultPath: string,
     app: App

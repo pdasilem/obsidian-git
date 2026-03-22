@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [2.39.0](https://github.com/Vinzent03/obsidian-git/compare/2.38.0...2.39.0) (2026-03-22)
+
+### Features
+
+* add desktop GitHub PAT sync with secret storage, explicit remote, and branch configuration
+* add lightweight GitHub connection test in settings
+
+### Bug Fixes
+
+* avoid relying on host SSH keys for configured desktop GitHub sync
+* auto-switch to the configured GitHub branch before sync operations
+
 ## [2.38.0](https://github.com/Vinzent03/obsidian-git/compare/2.37.1...2.38.0) (2026-03-04)
 
 

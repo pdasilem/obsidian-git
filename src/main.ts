@@ -17,6 +17,7 @@ import { pluginRef } from "src/pluginGlobalRef";
 import { PromiseQueue } from "src/promiseQueue";
 import { ObsidianGitSettingsTab } from "src/setting/settings";
 import { StatusBar } from "src/statusBar";
+import { GitHubAuth } from "./githubAuth";
 import { CustomMessageModal } from "src/ui/modals/customMessageModal";
 import AutomaticsManager from "./automaticsManager";
 import { addCommmands } from "./commands";
@@ -68,6 +69,7 @@ export default class ObsidianGit extends Plugin {
     automaticsManager = new AutomaticsManager(this);
     tools = new Tools(this);
     localStorage = new LocalStorageSettings(this);
+    private _githubAuth?: GitHubAuth;
     settings: ObsidianGitSettings;
     settingsTab?: ObsidianGitSettingsTab;
     statusBar?: StatusBar;
@@ -99,6 +101,11 @@ export default class ObsidianGit extends Plugin {
     setPluginState(state: Partial<PluginState>): void {
         this.state = Object.assign(this.state, state);
         this.statusBar?.display();
+    }
+
+    get githubAuth(): GitHubAuth {
+        this._githubAuth ??= new GitHubAuth(this.app);
+        return this._githubAuth;
     }
 
     async updateCachedStatus(): Promise<Status> {
@@ -757,9 +764,24 @@ export default class ObsidianGit extends Plugin {
         return this.gitReady;
     }
 
+    private async ensureConfiguredGitHubBranch(): Promise<boolean> {
+        if (!(this.gitManager instanceof SimpleGit)) {
+            return true;
+        }
+        const switchedBranch =
+            await this.gitManager.ensureConfiguredGitHubBranch();
+        if (switchedBranch) {
+            this.displayMessage(`Switched to ${switchedBranch}`);
+            this.app.workspace.trigger("obsidian-git:refresh");
+            await this.branchBar?.display();
+        }
+        return true;
+    }
+
     ///Used for command
     async pullChangesFromRemote(): Promise<void> {
         if (!(await this.isAllInitialized())) return;
+        if (!(await this.ensureConfiguredGitHubBranch())) return;
 
         const filesUpdated = await this.pull();
         if (filesUpdated === false) {
@@ -797,6 +819,7 @@ export default class ObsidianGit extends Plugin {
         onlyStaged?: boolean;
     }): Promise<void> {
         if (!(await this.isAllInitialized())) return;
+        if (!(await this.ensureConfiguredGitHubBranch())) return;
 
         if (
             this.settings.syncMethod == "reset" &&
@@ -852,6 +875,7 @@ export default class ObsidianGit extends Plugin {
     }): Promise<boolean> {
         if (!(await this.isAllInitialized())) return false;
         try {
+            await this.ensureConfiguredGitHubBranch();
             let hadConflict = this.localStorage.getConflict();
 
             let status: Status | undefined;
@@ -1054,6 +1078,7 @@ export default class ObsidianGit extends Plugin {
      */
     async push(): Promise<boolean> {
         if (!(await this.isAllInitialized())) return false;
+        await this.ensureConfiguredGitHubBranch();
         if (!(await this.remotesAreSet())) {
             return false;
         }
@@ -1146,6 +1171,7 @@ export default class ObsidianGit extends Plugin {
             return;
         }
         try {
+            await this.ensureConfiguredGitHubBranch();
             await this.gitManager.fetch();
 
             this.displayMessage(`Fetched from remote`);
@@ -1282,6 +1308,12 @@ export default class ObsidianGit extends Plugin {
      */
     async remotesAreSet(): Promise<boolean> {
         if (this.settings.updateSubmodules) {
+            return true;
+        }
+        if (
+            this.gitManager instanceof SimpleGit &&
+            this.gitManager.hasConfiguredGitHubSync()
+        ) {
             return true;
         }
         if (

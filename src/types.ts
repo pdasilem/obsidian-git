@@ -56,6 +56,10 @@ export interface ObsidianGitSettings {
     mergeOnPull?: boolean;
     refreshSourceControl: boolean;
     basePath: string;
+    githubUsername: string;
+    githubRepoUrl: string;
+    githubRemoteName: string;
+    githubBranch: string;
     showedMobileNotice: boolean;
     refreshSourceControlTimer: number;
     showBranchStatusBar: boolean;
