@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.39.1](https://github.com/Vinzent03/obsidian-git/compare/2.39.0...2.39.1) (2026-03-22)
+
+### Bug Fixes
+
+* simplify GitHub PAT sync settings and secret selection flow
+* stabilize CI workflows and formatter compatibility for the 2.39 release
+
 ## [2.39.0](https://github.com/Vinzent03/obsidian-git/compare/2.38.0...2.39.0) (2026-03-22)
 
 ### Features
