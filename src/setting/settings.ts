@@ -15,6 +15,7 @@ import {
 import { IsomorphicGit } from "src/gitManager/isomorphicGit";
 import { SimpleGit } from "src/gitManager/simpleGit";
 import { previewColor } from "src/editor/lineAuthor/lineAuthorProvider";
+import { GeneralModal } from "src/ui/modals/generalModal";
 import type {
     LineAuthorDateTimeFormatOptions,
     LineAuthorDisplay,
