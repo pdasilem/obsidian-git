@@ -99,13 +99,16 @@ export class LocalStorageSettings {
     }
 
     getGitHubPatSecretName(): string | null {
-        return this.app.loadLocalStorage(this.prefix + "githubPatSecretName");
+        const value = this.app.loadLocalStorage(
+            this.prefix + "githubPatSecretName"
+        );
+        return value && value.length > 0 ? value : null;
     }
 
     setGitHubPatSecretName(value: string | null): void {
         return this.app.saveLocalStorage(
             this.prefix + "githubPatSecretName",
-            value
+            value ?? ""
         );
     }
 
