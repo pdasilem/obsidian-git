@@ -35,6 +35,14 @@ import {
 } from "../utils";
 import { GitManager } from "./gitManager";
 
+type GitHubRemoteConfig = {
+    branch: string;
+    remoteName: string;
+    remoteUrl: string;
+    username: string;
+    pat: string;
+};
+
 export class SimpleGit extends GitManager {
     git: simple.SimpleGit;
     absoluteRepoPath: string;
@@ -1285,15 +1293,7 @@ export class SimpleGit extends GitManager {
     private getConfiguredGitHubRemote(
         requireCompleteConfig = false,
         requirePat = requireCompleteConfig
-    ):
-        | {
-              branch: string;
-              remoteName: string;
-              remoteUrl: string;
-              username: string;
-              pat: string;
-          }
-        | undefined {
+    ): GitHubRemoteConfig | undefined {
         const username = this.plugin.settings.githubUsername.trim();
         const remoteUrl = normalizeGitHubRepoUrl(
             this.plugin.settings.githubRepoUrl
@@ -1342,15 +1342,7 @@ export class SimpleGit extends GitManager {
             return undefined;
         }
 
-        let config:
-            | {
-                  branch: string;
-                  remoteName: string;
-                  remoteUrl: string;
-                  username: string;
-                  pat: string;
-              }
-            | undefined;
+        let config: GitHubRemoteConfig | undefined;
         try {
             config = this.getConfiguredGitHubRemote();
         } catch {

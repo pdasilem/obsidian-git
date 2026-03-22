@@ -41,6 +41,10 @@ const FORMAT_STRING_REFERENCE_URL =
     "https://momentjs.com/docs/#/parsing/string-format/";
 const LINE_AUTHOR_FEATURE_WIKI_LINK =
     "https://publish.obsidian.md/git-doc/Line+Authoring";
+const GITHUB_CONNECTION_SUCCESS_STYLE =
+    "color: var(--color-green); font-weight: var(--font-semibold); margin-left: 8px;";
+const GITHUB_CONNECTION_ERROR_STYLE =
+    "color: var(--color-red); font-weight: var(--font-semibold); margin-left: 8px;";
 
 export class ObsidianGitSettingsTab extends PluginSettingTab {
     lineAuthorColorSettings: Map<"oldest" | "newest", Setting> = new Map();
@@ -840,7 +844,7 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
             new Setting(containerEl)
                 .setName("Repository URL")
                 .setDesc(
-                    "HTTPS URL of the personal GitHub repository used by this vault. It will be applied to origin automatically."
+                    "HTTPS URL of the personal GitHub repository used by this vault. The plugin applies it to origin automatically."
                 )
                 .addText((cb) => {
                     cb.setPlaceholder(DEFAULT_SETTINGS.githubRepoUrl);
@@ -879,13 +883,13 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                         connectionStatusEl.setText("✓");
                         connectionStatusEl.setAttribute(
                             "style",
-                            "color: var(--color-green); font-weight: var(--font-semibold); margin-left: 8px;"
+                            GITHUB_CONNECTION_SUCCESS_STYLE
                         );
                     } catch (error) {
                         connectionStatusEl.setText("✕");
                         connectionStatusEl.setAttribute(
                             "style",
-                            "color: var(--color-red); font-weight: var(--font-semibold); margin-left: 8px;"
+                            GITHUB_CONNECTION_ERROR_STYLE
                         );
                         plugin.displayError(error);
                     }
