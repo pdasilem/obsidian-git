@@ -790,11 +790,13 @@ export class ObsidianGitSettingsTab extends PluginSettingTab {
                         new Notice("No secrets found in Obsidian secret storage.");
                         return;
                     }
-                    const secretName = await new GeneralModal(this.plugin, {
+                    const secretModal = new GeneralModal(this.plugin, {
                         options: secretNames,
                         placeholder: "Select PAT secret",
                         onlySelection: true,
-                    }).openAndGetResult();
+                    });
+                    const secretName: string | undefined =
+                        await secretModal.openAndGetResult();
                     if (secretName == undefined) {
                         return;
                     }

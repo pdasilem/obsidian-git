@@ -653,7 +653,10 @@ export class SimpleGit extends GitManager {
             const branchInfo = await this.branchInfo();
             const branch = configuredRemote?.branch ?? branchInfo.current;
             if (configuredRemote) {
-                this.ensureExpectedBranch(branchInfo.current, configuredRemote);
+                this.ensureExpectedBranch(
+                    branchInfo.current ?? null,
+                    configuredRemote
+                );
             }
             const trackingBranch =
                 configuredRemote != null
@@ -1125,7 +1128,7 @@ export class SimpleGit extends GitManager {
     }
 
     async testGitHubConnection(): Promise<void> {
-        const config = this.getConfiguredGitHubRemote(true, true);
+        const config = this.getConfiguredGitHubRemote(true, true)!;
         await this.git.raw([
             "ls-remote",
             "--exit-code",
@@ -1140,7 +1143,7 @@ export class SimpleGit extends GitManager {
             return undefined;
         }
         await this.ensureConfiguredGitHubRemote();
-        const config = this.getConfiguredGitHubRemote(true, false);
+        const config = this.getConfiguredGitHubRemote(true, false)!;
         const status = await this.git.status();
         if (status.current === config.branch) {
             return undefined;
@@ -1173,7 +1176,7 @@ export class SimpleGit extends GitManager {
         if (!this.hasConfiguredGitHubSync()) {
             return;
         }
-        const config = this.getConfiguredGitHubRemote(true, false);
+        const config = this.getConfiguredGitHubRemote(true, false)!;
         const currentRemoteUrl = await this.getRemoteUrl(config.remoteName);
         if (currentRemoteUrl !== config.remoteUrl) {
             await this.setRemote(config.remoteName, config.remoteUrl);
